@@ -2,8 +2,10 @@ package com.ethan.voxyworldgenv2.network;
 
 import com.ethan.voxyworldgenv2.VoxyWorldGenV2;
 import com.ethan.voxyworldgenv2.core.PlayerTracker;
+import com.ethan.voxyworldgenv2.integration.VoxyIntegration;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -16,9 +18,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -118,11 +122,11 @@ public class NetworkHandler {
     public static void broadcastLODData(LevelChunk chunk) {
         ChunkPos pos = chunk.getPos();
         int minY = chunk.getMinSection();
-        List<LODDataPayload.SectionData> sections = buildSections(chunk);
-
-        if (sections.isEmpty()) return;
+        if (!hasBlocks(chunk)) return;
 
         double maxDistSq = 4096.0 * 4096.0;
+        // only encoded when a remote player needs it
+        List<LODDataPayload.SectionData> sections = null;
 
         for (ServerPlayer player : PlayerTracker.getInstance().getPlayers()) {
             double dx = player.getX() - (pos.getMiddleBlockX());
@@ -133,11 +137,22 @@ public class NetworkHandler {
                 continue;
             }
 
+            if (isLocalHost(player)) {
+                ingestForLocalHost(chunk);
+                continue;
+            }
+
+            if (sections == null) sections = buildSections(chunk);
             sendSectionsInBatches(player, chunk.getLevel().dimension(), pos, minY, sections);
         }
     }
 
     public static void sendLODData(ServerPlayer player, LevelChunk chunk) {
+        if (isLocalHost(player)) {
+            setSyncedState(player, chunk.getPos(), ingestForLocalHost(chunk));
+            return;
+        }
+
         ChunkPos pos = chunk.getPos();
         int minY = chunk.getMinSection();
         List<LODDataPayload.SectionData> sections = buildSections(chunk);
@@ -149,6 +164,47 @@ public class NetworkHandler {
 
         sendSectionsInBatches(player, chunk.getLevel().dimension(), pos, minY, sections);
         setSyncedState(player, pos, true);
+    }
+
+    // the host of a singleplayer or lan world shares this server's voxy, so it gets the same sections and light
+    // a packet would carry handed to voxy directly instead of encoding them and decoding them again on its client
+    private static boolean isLocalHost(ServerPlayer player) {
+        return player.server.isSingleplayerOwner(player.getGameProfile());
+    }
+
+    private static boolean hasBlocks(LevelChunk chunk) {
+        for (LevelChunkSection section : chunk.getSections()) {
+            if (section != null && !section.hasOnlyAir()) return true;
+        }
+        return false;
+    }
+
+    // returns whether any section was handed over, like a non-empty packet
+    @SuppressWarnings("unchecked")
+    private static boolean ingestForLocalHost(LevelChunk chunk) {
+        ChunkPos pos = chunk.getPos();
+        int minY = chunk.getMinSection();
+        var lightEngine = chunk.getLevel().getLightEngine();
+        boolean any = false;
+
+        for (int i = 0; i < chunk.getSections().length; i++) {
+            LevelChunkSection section = chunk.getSections()[i];
+            if (section == null || section.hasOnlyAir()) continue;
+
+            // copies, as the packet was, so voxy never reads a section the server is still changing
+            LevelChunkSection copy = new LevelChunkSection(section.getStates().copy(),
+                ((PalettedContainer<Holder<Biome>>) section.getBiomes()).copy());
+
+            SectionPos sectionPos = SectionPos.of(pos, minY + i);
+            DataLayer bl = lightEngine.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos);
+            DataLayer sl = lightEngine.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
+
+            VoxyIntegration.rawIngest(chunk.getLevel(), copy, pos.x, minY + i, pos.z,
+                bl != null ? bl.copy() : null, sl != null ? sl.copy() : null);
+            any = true;
+        }
+
+        return any;
     }
 
     private static List<LODDataPayload.SectionData> buildSections(LevelChunk chunk) {
