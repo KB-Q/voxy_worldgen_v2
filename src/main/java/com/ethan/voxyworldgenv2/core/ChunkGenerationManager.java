@@ -70,6 +70,9 @@ public final class ChunkGenerationManager {
     private ServerLevel currentLevel = null;
     private final java.util.Map<java.util.UUID, ChunkPos> lastPlayerPositions = new java.util.concurrent.ConcurrentHashMap<>();
     private java.util.function.BooleanSupplier pauseCheck = () -> false;
+    // last end of server tick, a paused or stuck server neither unloads chunks nor expires their tickets
+    private volatile long lastServerTickNanos = 0;
+    private static final long MAX_TICK_GAP_NANOS = 1_000_000_000L;
 
     // worker
     private Thread workerThread;
@@ -100,8 +103,6 @@ public final class ChunkGenerationManager {
     public void initialize(MinecraftServer server) {
         this.server = server;
         this.running.set(true);
-        // unpaused by default
-        this.pauseCheck = () -> false; 
         Config.load();
         this.throttle = new Semaphore(Config.DATA.maxActiveTasks);
         startWorker();
@@ -165,7 +166,9 @@ public final class ChunkGenerationManager {
                     continue;
                 }
 
-                if (tpsMonitor.isThrottled() || pauseCheck.getAsBoolean()) {
+                // only generate while the server ticks, otherwise every generated chunk stays loaded until it does
+                boolean serverStalled = System.nanoTime() - lastServerTickNanos > MAX_TICK_GAP_NANOS;
+                if (tpsMonitor.isThrottled() || pauseCheck.getAsBoolean() || serverStalled) {
                     Thread.sleep(500);
                     continue;
                 }
@@ -355,6 +358,7 @@ public final class ChunkGenerationManager {
 
     public void tick() {
         if (!running.get() || server == null) return;
+        lastServerTickNanos = System.nanoTime();
         
         processPendingTickets();
         
