@@ -219,7 +219,7 @@ public final class ChunkGenerationManager {
                                 ServerPlayer p = server.getPlayerList().getPlayer(playerUUID);
                                 if (p != null) {
                                     for (ChunkPos syncPos : finalSyncBatch) {
-                                        LevelChunk c = level.getChunkSource().getChunk(syncPos.x, syncPos.z, false);
+                                        LevelChunk c = level.getChunkSource().getChunkNow(syncPos.x, syncPos.z);
                                         if (c != null) {
                                             com.ethan.voxyworldgenv2.network.NetworkHandler.sendLODData(p, c);
                                         }
@@ -309,9 +309,11 @@ public final class ChunkGenerationManager {
                         List<ChunkPos> actuallyGenerate = new ArrayList<>();
                         
                         for (ChunkPos pos : readyToGenerate) {
-                            if (finalState.level.hasChunk(pos.x, pos.z)) {
-                                LevelChunk existingChunk = finalState.level.getChunk(pos.x, pos.z);
-                                if (existingChunk != null && !existingChunk.isEmpty()) {
+                            // only full chunks, getChunk would block the server thread until a chunk that has a
+                            // ticket but is still generating is done
+                            LevelChunk existingChunk = cache.getChunkNow(pos.x, pos.z);
+                            if (existingChunk != null) {
+                                if (!existingChunk.isEmpty()) {
                                     VoxyIntegration.ingestChunk(existingChunk);
                                     com.ethan.voxyworldgenv2.network.NetworkHandler.broadcastLODData(existingChunk);
                                 }

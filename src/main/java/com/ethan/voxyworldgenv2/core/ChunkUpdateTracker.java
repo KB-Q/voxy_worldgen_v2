@@ -43,7 +43,7 @@ public class ChunkUpdateTracker {
         
         for (long posLong : toProcess) {
             ChunkPos pos = new ChunkPos(posLong);
-            LevelChunk chunk = level.getChunkSource().getChunk(pos.x, pos.z, false);
+            LevelChunk chunk = level.getChunkSource().getChunkNow(pos.x, pos.z);
             if (chunk != null) {
                 NetworkHandler.broadcastLODData(chunk);
             }
