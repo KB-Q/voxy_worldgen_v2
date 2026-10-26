@@ -15,18 +15,12 @@ import net.minecraft.core.Holder;
 public class NetworkClientHandler {
     
     public static void init() {
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.HandshakePayload.TYPE, (payload, context) -> {
-            boolean serverHasMod = payload.serverHasMod();
-            context.client().execute(() -> {
-                NetworkState.setServerConnected(serverHasMod);
-            });
-        });
+        // fabric packet handlers run on the client thread
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.HandshakePayload.TYPE, (payload, player, responseSender) ->
+                NetworkState.setServerConnected(payload.serverHasMod()));
 
-        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.LODDataPayload.TYPE, (payload, context) -> {
-            context.client().execute(() -> {
-                handleLODData(payload);
-            });
-        });
+        ClientPlayNetworking.registerGlobalReceiver(NetworkHandler.LODDataPayload.TYPE, (payload, player, responseSender) ->
+                handleLODData(payload));
     }
 
     @SuppressWarnings("unchecked")
@@ -54,18 +48,8 @@ public class NetworkClientHandler {
                 // recreate section using the biome registry
                 LevelChunkSection section = new LevelChunkSection(level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME));
                 
-                // we need to read the states and biomes back using RegistryFriendlyByteBuf for palette consistency
-                net.minecraft.network.RegistryFriendlyByteBuf statesBuf = new net.minecraft.network.RegistryFriendlyByteBuf(
-                    new net.minecraft.network.FriendlyByteBuf(statesRaw), 
-                    level.registryAccess()
-                );
-                ((PalettedContainer<BlockState>) section.getStates()).read(statesBuf);
-                
-                net.minecraft.network.RegistryFriendlyByteBuf biomesBuf = new net.minecraft.network.RegistryFriendlyByteBuf(
-                    new net.minecraft.network.FriendlyByteBuf(biomesRaw), 
-                    level.registryAccess()
-                );
-                ((PalettedContainer<Holder<Biome>>) section.getBiomes()).read(biomesBuf);
+                ((PalettedContainer<BlockState>) section.getStates()).read(new net.minecraft.network.FriendlyByteBuf(statesRaw));
+                ((PalettedContainer<Holder<Biome>>) section.getBiomes()).read(new net.minecraft.network.FriendlyByteBuf(biomesRaw));
                 
                 // ingest into voxy
                 DataLayer bl = sectionData.blockLight() != null ? new DataLayer(sectionData.blockLight()) : null;

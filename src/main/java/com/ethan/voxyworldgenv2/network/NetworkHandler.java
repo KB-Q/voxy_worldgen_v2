@@ -3,15 +3,13 @@ package com.ethan.voxyworldgenv2.network;
 import com.ethan.voxyworldgenv2.VoxyWorldGenV2;
 import com.ethan.voxyworldgenv2.core.PlayerTracker;
 import com.ethan.voxyworldgenv2.integration.VoxyIntegration;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.FabricPacket;
+import net.fabricmc.fabric.api.networking.v1.PacketType;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,36 +26,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NetworkHandler {
-    public static final ResourceLocation HANDSHAKE_ID = ResourceLocation.parse(VoxyWorldGenV2.MOD_ID + ":handshake");
-    public static final ResourceLocation LOD_DATA_ID = ResourceLocation.parse(VoxyWorldGenV2.MOD_ID + ":lod_data");
+    public static final ResourceLocation HANDSHAKE_ID = new ResourceLocation(VoxyWorldGenV2.MOD_ID, "handshake");
+    public static final ResourceLocation LOD_DATA_ID = new ResourceLocation(VoxyWorldGenV2.MOD_ID, "lod_data");
 
     // keep individual packets well under Netty's 2MB limit to prevent connection resets on public servers
     private static final int MAX_PACKET_BYTES = 32_768;
 
-    public record HandshakePayload(boolean serverHasMod) implements CustomPacketPayload {
-        public static final Type<HandshakePayload> TYPE = new Type<>(HANDSHAKE_ID);
-        public static final StreamCodec<FriendlyByteBuf, HandshakePayload> CODEC = CustomPacketPayload.codec(HandshakePayload::write, HandshakePayload::new);
+    // 1.20.1 has no custom payload types, fabric's packet api carries the same data
+    public record HandshakePayload(boolean serverHasMod) implements FabricPacket {
+        public static final PacketType<HandshakePayload> TYPE = PacketType.create(HANDSHAKE_ID, HandshakePayload::new);
 
         public HandshakePayload(FriendlyByteBuf buf) {
             this(buf.readBoolean());
         }
 
+        @Override
         public void write(FriendlyByteBuf buf) {
             buf.writeBoolean(this.serverHasMod);
         }
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
+        public PacketType<?> getType() {
             return TYPE;
         }
     }
 
-    public record LODDataPayload(ResourceKey<Level> dimension, ChunkPos pos, int minY, List<SectionData> sections) implements CustomPacketPayload {
-        public static final Type<LODDataPayload> TYPE = new Type<>(LOD_DATA_ID);
-        public static final StreamCodec<RegistryFriendlyByteBuf, LODDataPayload> CODEC = CustomPacketPayload.codec(LODDataPayload::write, LODDataPayload::new);
+    public record LODDataPayload(ResourceKey<Level> dimension, ChunkPos pos, int minY, List<SectionData> sections) implements FabricPacket {
+        public static final PacketType<LODDataPayload> TYPE = PacketType.create(LOD_DATA_ID, LODDataPayload::new);
 
         public record SectionData(int y, byte[] states, byte[] biomes, byte[] blockLight, byte[] skyLight) {
-            public void write(RegistryFriendlyByteBuf buf) {
+            public void write(FriendlyByteBuf buf) {
                 buf.writeInt(y);
                 buf.writeByteArray(states);
                 buf.writeByteArray(biomes);
@@ -65,7 +63,7 @@ public class NetworkHandler {
                 buf.writeNullable(skyLight, (b, a) -> b.writeByteArray(a));
             }
 
-            public static SectionData read(RegistryFriendlyByteBuf buf) {
+            public static SectionData read(FriendlyByteBuf buf) {
                 return new SectionData(
                     buf.readInt(),
                     buf.readByteArray(),
@@ -76,35 +74,31 @@ public class NetworkHandler {
             }
         }
 
-        public LODDataPayload(RegistryFriendlyByteBuf buf) {
+        public LODDataPayload(FriendlyByteBuf buf) {
             this(
-                ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(buf.readUtf())),
+                ResourceKey.create(Registries.DIMENSION, new ResourceLocation(buf.readUtf())),
                 buf.readChunkPos(),
                 buf.readInt(),
-                buf.readCollection(ArrayList::new, b -> SectionData.read((RegistryFriendlyByteBuf) b))
+                buf.readCollection(ArrayList::new, SectionData::read)
             );
         }
 
-        public void write(RegistryFriendlyByteBuf buf) {
+        @Override
+        public void write(FriendlyByteBuf buf) {
             buf.writeUtf(dimension.location().toString());
             buf.writeChunkPos(pos);
             buf.writeInt(minY);
-            // cast to avoid ambiguous writeCollection / BiConsumer type issues
-            buf.writeCollection(sections, (b, s) -> s.write((RegistryFriendlyByteBuf) b));
+            buf.writeCollection(sections, (b, s) -> s.write(b));
         }
 
         @Override
-        public Type<? extends CustomPacketPayload> type() {
+        public PacketType<?> getType() {
             return TYPE;
         }
     }
 
     public static void init() {
-        PayloadTypeRegistry.playC2S().register(HandshakePayload.TYPE, HandshakePayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(HandshakePayload.TYPE, HandshakePayload.CODEC);
-        
-        PayloadTypeRegistry.playS2C().register(LODDataPayload.TYPE, LODDataPayload.CODEC);
-        
+        // fabric packets need no registration to be sent, the client registers its receivers
         VoxyWorldGenV2.LOGGER.info("voxy networking initialized");
     }
 
@@ -221,12 +215,12 @@ public class NetworkHandler {
             io.netty.buffer.ByteBuf biomesRaw = io.netty.buffer.Unpooled.buffer();
             byte[] states, biomes;
             try {
-                RegistryFriendlyByteBuf statesBuf = new RegistryFriendlyByteBuf(new FriendlyByteBuf(statesRaw), chunk.getLevel().registryAccess());
+                FriendlyByteBuf statesBuf = new FriendlyByteBuf(statesRaw);
                 section.getStates().write(statesBuf);
                 states = new byte[statesBuf.readableBytes()];
                 statesBuf.readBytes(states);
 
-                RegistryFriendlyByteBuf biomesBuf = new RegistryFriendlyByteBuf(new FriendlyByteBuf(biomesRaw), chunk.getLevel().registryAccess());
+                FriendlyByteBuf biomesBuf = new FriendlyByteBuf(biomesRaw);
                 section.getBiomes().write(biomesBuf);
                 biomes = new byte[biomesBuf.readableBytes()];
                 biomesBuf.readBytes(biomes);
