@@ -30,7 +30,12 @@ public class VoxyWorldGenV2 implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register(ServerEventHandler::onPlayerDisconnect);
         
         // server tick event
+        ServerTickEvents.START_SERVER_TICK.register(server -> ChunkGenerationManager.getInstance().onTickStart());
         ServerTickEvents.END_SERVER_TICK.register(ServerEventHandler::onServerTick);
+
+        // /vwg on|off|toggle|status
+        net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+                com.ethan.voxyworldgenv2.command.VwgCommand.register(dispatcher));
 
         // sync LOD data when a completed chunk loads into memory (issue #50)
         ServerChunkEvents.CHUNK_LOAD.register(ServerEventHandler::onChunkLoad);

@@ -46,8 +46,13 @@ public final class DebugRenderer {
         }
         
         String status;
-        if (manager.isThrottled()) {
-            status = "§cthrottled (low tps)";
+        var throttle = manager.getThrottle();
+        if (!com.ethan.voxyworldgenv2.core.Config.DATA.enabled) {
+            status = "§coff";
+        } else if (throttle.isPaused()) {
+            status = "§cpaused (" + throttle.reason() + ")";
+        } else if (throttle.reason() != null) {
+            status = "§eslowed (" + throttle.reason() + ")";
         } else if (remaining == 0) {
             status = "§adone";
         } else {
@@ -65,7 +70,7 @@ public final class DebugRenderer {
             lineList.add("§7completed: §a" + formatNumber(stats.getCompleted()));
             lineList.add("§7skipped: §f" + formatNumber(stats.getSkipped()));
             lineList.add("§7remaining: §e" + formatNumber(remaining) + " §8(" + eta + ")");
-            lineList.add("§7active: §b" + manager.getActiveTaskCount());
+            lineList.add("§7active: §b" + manager.getActiveTaskCount() + " §8/ " + Math.min(throttle.allowedTasks(), com.ethan.voxyworldgenv2.core.Config.DATA.maxActiveTasks));
             lineList.add("§7rate: §f" + String.format("%.1f", rate) + " c/s");
             lineList.add("§7voxy: " + (VoxyIntegration.isVoxyAvailable() ? "§aenabled" : "§cdisabled"));
         } else if (isVoxyServer) {

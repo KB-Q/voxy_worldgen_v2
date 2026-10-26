@@ -63,7 +63,7 @@ public final class ChunkGenerationManager {
     private final AtomicBoolean configReloadScheduled = new AtomicBoolean(false);
     
     // components
-    private final TpsMonitor tpsMonitor = new TpsMonitor();
+    private final GenerationThrottle generationThrottle = new GenerationThrottle();
     private Semaphore throttle;
     private MinecraftServer server;
     private ResourceKey<Level> currentDimensionKey = null;
@@ -126,7 +126,7 @@ public final class ChunkGenerationManager {
         server = null;
         stats.reset();
         activeTaskCount.set(0);
-        tpsMonitor.reset();
+        generationThrottle.reset();
         currentDimensionKey = null;
         currentLevel = null;
         lastPlayerPositions.clear();
@@ -168,8 +168,13 @@ public final class ChunkGenerationManager {
 
                 // only generate while the server ticks, otherwise every generated chunk stays loaded until it does
                 boolean serverStalled = System.nanoTime() - lastServerTickNanos > MAX_TICK_GAP_NANOS;
-                if (tpsMonitor.isThrottled() || pauseCheck.getAsBoolean() || serverStalled) {
+                int allowedTasks = generationThrottle.allowedTasks();
+                if (allowedTasks == 0 || pauseCheck.getAsBoolean() || serverStalled) {
                     Thread.sleep(500);
+                    continue;
+                }
+                if (activeTaskCount.get() >= allowedTasks) {
+                    Thread.sleep(20);
                     continue;
                 }
                 
@@ -267,6 +272,7 @@ public final class ChunkGenerationManager {
                 int processedCount = 0;
                 for (ChunkPos pos : preFiltered) {
                     if (!workerRunning.get()) break;
+                    if (activeTaskCount.get() >= generationThrottle.allowedTasks()) break;
                     
                     boolean acquired = false;
                     try {
@@ -358,6 +364,11 @@ public final class ChunkGenerationManager {
         }
     }
 
+    public void onTickStart() {
+        if (!running.get() || server == null) return;
+        generationThrottle.onTickStart();
+    }
+
     public void tick() {
         if (!running.get() || server == null) return;
         lastServerTickNanos = System.nanoTime();
@@ -370,7 +381,7 @@ public final class ChunkGenerationManager {
             restartScan();
         }
         
-        tpsMonitor.tick();
+        generationThrottle.onTickEnd(Config.DATA.maxActiveTasks);
         stats.tick();
         checkPlayerMovement();
         
@@ -576,10 +587,15 @@ public final class ChunkGenerationManager {
         DimensionState state = dimensionStates.get(currentDimensionKey);
         return state != null ? state.remainingInRadius.get() : 0; 
     }
-    public boolean isThrottled() { return tpsMonitor.isThrottled(); }
+    public GenerationThrottle getThrottle() { return generationThrottle; }
     public int getQueueSize() { return 0; }
     
     public void setPauseCheck(java.util.function.BooleanSupplier check) {
         this.pauseCheck = check;
+    }
+
+    // frame rate of the local client for the throttle, -1 when it does not apply
+    public void setClientFps(java.util.function.IntSupplier fps) {
+        generationThrottle.setClientFps(fps);
     }
 }

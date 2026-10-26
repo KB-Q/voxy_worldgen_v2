@@ -13,5 +13,18 @@
     "config.voxyworldgenv2.option.max_queue.tooltip": "Maximum number of chunks to keep in the pending queue.",
     "config.voxyworldgenv2.option.max_active": "Max Parallel Tasks",
     "config.voxyworldgenv2.option.max_active.tooltip": "Maximum number of chunks generating simultaneously.",
-    "debug.voxyworldgenv2.skipped": "skipped"
+    "debug.voxyworldgenv2.skipped": "skipped",
+    "config.voxyworldgenv2.category.throttle": "Throttle",
+    "config.voxyworldgenv2.option.throttle_enabled": "Throttle Enabled",
+    "config.voxyworldgenv2.option.throttle_enabled.tooltip": "Slow down or pause generation when memory runs low or the game lags.",
+    "config.voxyworldgenv2.option.throttle_mspt": "Target Tick Time (ms)",
+    "config.voxyworldgenv2.option.throttle_mspt.tooltip": "Generation slows down while server ticks take longer than this. A tick has 50 ms at 20 TPS.",
+    "config.voxyworldgenv2.option.throttle_fps": "Minimum FPS",
+    "config.voxyworldgenv2.option.throttle_fps.tooltip": "Singleplayer and LAN host only: generation slows down while the focused game runs below this frame rate. 0 turns it off.",
+    "config.voxyworldgenv2.option.throttle_slow_heap": "Slow Down at Memory (%)",
+    "config.voxyworldgenv2.option.throttle_slow_heap.tooltip": "Generation slows down when the memory still in use after the last garbage collection passes this share of the maximum heap.",
+    "config.voxyworldgenv2.option.throttle_pause_heap": "Pause at Memory (%)",
+    "config.voxyworldgenv2.option.throttle_pause_heap.tooltip": "Generation pauses above this share of the maximum heap and resumes below it.",
+    "key.categories.voxyworldgenv2": "Voxy World Gen V2",
+    "key.voxyworldgenv2.toggle": "Toggle Generation"
 }

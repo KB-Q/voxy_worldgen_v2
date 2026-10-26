@@ -34,7 +34,10 @@ public final class Config {
             DATA = GSON.fromJson(reader, ConfigData.class);
         } catch (IOException e) {
             VoxyWorldGenV2.LOGGER.error("failed to load config", e);
+            return;
         }
+        // writes options added since the file was created with their defaults
+        save();
     }
     
     public static void save() {
@@ -55,5 +58,11 @@ public final class Config {
         public int update_interval = 20; // legacy field for Compat
         public int maxQueueSize = 20000;
         public int maxActiveTasks = 20;
+        // throttle, see GenerationThrottle
+        public boolean throttleEnabled = true;
+        public int throttleTargetMspt = 40;
+        public int throttleMinFps = 20;
+        public int throttleSlowHeapPercent = 75;
+        public int throttlePauseHeapPercent = 85;
     }
 }

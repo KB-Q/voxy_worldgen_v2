@@ -55,6 +55,38 @@ public class ModMenuIntegration implements ModMenuApi {
                 .setSaveConsumer(newValue -> Config.DATA.maxActiveTasks = newValue)
                 .build());
             
+            ConfigCategory throttle = builder.getOrCreateCategory(Component.translatable("config.voxyworldgenv2.category.throttle"));
+
+            throttle.addEntry(entryBuilder.startBooleanToggle(Component.translatable("config.voxyworldgenv2.option.throttle_enabled"), Config.DATA.throttleEnabled)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("config.voxyworldgenv2.option.throttle_enabled.tooltip"))
+                .setSaveConsumer(newValue -> Config.DATA.throttleEnabled = newValue)
+                .build());
+
+            throttle.addEntry(entryBuilder.startIntSlider(Component.translatable("config.voxyworldgenv2.option.throttle_mspt"), Config.DATA.throttleTargetMspt, 10, 200)
+                .setDefaultValue(40)
+                .setTooltip(Component.translatable("config.voxyworldgenv2.option.throttle_mspt.tooltip"))
+                .setSaveConsumer(newValue -> Config.DATA.throttleTargetMspt = newValue)
+                .build());
+
+            throttle.addEntry(entryBuilder.startIntSlider(Component.translatable("config.voxyworldgenv2.option.throttle_fps"), Config.DATA.throttleMinFps, 0, 120)
+                .setDefaultValue(20)
+                .setTooltip(Component.translatable("config.voxyworldgenv2.option.throttle_fps.tooltip"))
+                .setSaveConsumer(newValue -> Config.DATA.throttleMinFps = newValue)
+                .build());
+
+            throttle.addEntry(entryBuilder.startIntSlider(Component.translatable("config.voxyworldgenv2.option.throttle_slow_heap"), Config.DATA.throttleSlowHeapPercent, 30, 99)
+                .setDefaultValue(75)
+                .setTooltip(Component.translatable("config.voxyworldgenv2.option.throttle_slow_heap.tooltip"))
+                .setSaveConsumer(newValue -> Config.DATA.throttleSlowHeapPercent = newValue)
+                .build());
+
+            throttle.addEntry(entryBuilder.startIntSlider(Component.translatable("config.voxyworldgenv2.option.throttle_pause_heap"), Config.DATA.throttlePauseHeapPercent, 30, 99)
+                .setDefaultValue(85)
+                .setTooltip(Component.translatable("config.voxyworldgenv2.option.throttle_pause_heap.tooltip"))
+                .setSaveConsumer(newValue -> Config.DATA.throttlePauseHeapPercent = newValue)
+                .build());
+
             builder.setSavingRunnable(() -> {
                 Config.save();
                 com.ethan.voxyworldgenv2.core.ChunkGenerationManager.getInstance().scheduleConfigReload();
